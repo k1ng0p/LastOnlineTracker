@@ -12,7 +12,6 @@ import { addMemberListDecorator, removeMemberListDecorator } from "@api/MemberLi
 import { Menu } from "@webpack/common";
 
 const PresenceStore = findByPropsLazy("getStatus", "getActivities");
-
 const lastSeenMap   = new Map<string, number>();
 const seenOnlineSet = new Set<string>();
 
@@ -30,25 +29,6 @@ function ago(ms: number): string {
 function isOffline(userId: string): boolean {
     try { return (PresenceStore.getStatus(userId) ?? "offline") === "offline"; }
     catch { return true; }
-}
-
-const subStyle: React.CSSProperties = {
-    display: "block", fontSize: "12px", fontWeight: 400,
-    lineHeight: "16px", color: "var(--text-muted)",
-    overflow: "hidden", whiteSpace: "nowrap",
-    textOverflow: "ellipsis", userSelect: "none",
-};
-
-function LastSeenText({ userId }: { userId: string; }) {
-    const [, tick] = React.useReducer(n => n + 1, 0);
-    React.useEffect(() => {
-        const t = setInterval(tick, 30_000);
-        return () => clearInterval(t);
-    }, []);
-    if (!isOffline(userId)) return null;
-    const ts = lastSeenMap.get(userId);
-    if (!ts) return null;
-    return <span style={subStyle}>Active {ago(Date.now() - ts)}</span>;
 }
 
 const ctxPatch = (_navId: string, children: any[], props: any) => {
@@ -71,92 +51,17 @@ const ctxPatch = (_navId: string, children: any[], props: any) => {
     );
 };
 
-const decoratorStyle: React.CSSProperties = {
-    fontSize: "11px", color: "var(--text-muted)", userSelect: "none",
-};
-
 export default definePlugin({
     name: "LastOnlineTracker",
-    description: "Shows 'Active X ago' below usernames in the DM list. Resets on restart.",
+    description: "Shows 'Active X ago' below usernames in the DM list, styled like Discord's native subtext.",
     authors: [{ name: "k1ng_op", id: 641266820187160576 }],
     dependencies: ["MemberListDecoratorsAPI", "ContextMenuAPI"],
 
-    patches: [
-        // ── DM list left sidebar ──────────────────────────────────────────────
-        // Confirmed from console:
-        //   r = user object  (r.isSystemUser(), r.username, r.id)
-        //   t = channel object (t.isSystemDM(), t.isMultiUserDM())
-        //
-        // THE BUG WE FIXED:
-        //   ?? has HIGHER precedence than ?:
-        //   So:  dmSubtext(r) ?? t.isSystemDM() ? A : B
-        //   Parses as: (dmSubtext(r) ?? t.isSystemDM()) ? A : B
-        //   When our fn returns JSX (truthy): JSX ? A : B = A = "Official Discord Message" ← WRONG
-        //
-        // THE FIX:
-        //   Capture the ENTIRE original subText expression (up to ,highlighted:)
-        //   and pass it as a lazy thunk: () => originalExpr
-        //   Our function calls getOriginal() only when it has no data.
-        //   When it has data it returns our JSX directly — no ternary involved.
-        {
-            find: '"PrivateChannel"',
-            replacement: {
-                // Captures the full Discord subText expression from t.isSystemDM()
-                // all the way to the next prop ,highlighted: using lazy matching.
-                // The full expression is passed as a thunk so it only evaluates
-                // when we actually need it (saves work + avoids side effects).
-                match: /,subText:(t\.isSystemDM\(\)[\s\S]*?),highlighted:/,
-                replace: (_, expr) =>
-                    `,subText:$self.dmSubtext(r,()=>(${expr})),highlighted:`,
-            },
-            optional: true,
-        },
-    ],
-
-    // user       = `r` in compiled code = Discord user object
-    // getOriginal = thunk that evaluates Discord's full subText expression
-    //               (system DM label / group size / activity status / null)
-    dmSubtext(user: any, getOriginal: () => React.ReactNode): React.ReactNode {
-        const userId: string | undefined = user?.id;
-
-        // No userId, or user is online/idle/dnd → show Discord's own subtext
-        if (!userId || !isOffline(userId)) return getOriginal();
-
-        const ts = lastSeenMap.get(userId);
-
-        // Not tracked yet → show Discord's own subtext (nothing for offline users)
-        if (!ts) return getOriginal();
-
-        // We have data → return our element directly, no ternary involved
-        return <LastSeenText key="lot-dm" userId={userId} />;
-    },
-
-    getTracked() {
-        const out: Record<string, string> = {};
-        lastSeenMap.forEach((ts, id) => { out[id] = ago(Date.now() - ts); });
-        console.table(out);
-        return out;
-    },
-
-    __test(userId: string) {
-        seenOnlineSet.add(userId);
-        lastSeenMap.set(userId, Date.now() - 5 * 60 * 1000);
-        console.log(`[LastOnlineTracker] Injected test data for ${userId} — scroll the DM list to re-render`);
-    },
-
     flux: {
-        PRESENCE_UPDATES({ updates }: {
-            updates?: Array<{
-                user:          { id: string };
-                status:        string;
-                clientStatus?: Record<string, string>;
-            }>;
-        }) {
+        PRESENCE_UPDATES({ updates }: { updates?: Array<{ user: { id: string }; status: string; clientStatus?: Record<string, string>; }>; }) {
             if (!Array.isArray(updates)) return;
             for (const { user, status, clientStatus } of updates) {
-                const fullyOffline =
-                    status === "offline" &&
-                    (!clientStatus || Object.keys(clientStatus).length === 0);
+                const fullyOffline = status === "offline" && (!clientStatus || Object.keys(clientStatus).length === 0);
                 if (!fullyOffline) {
                     seenOnlineSet.add(user.id);
                     lastSeenMap.delete(user.id);
@@ -169,18 +74,65 @@ export default definePlugin({
     },
 
     start() {
+        const style = document.createElement("style");
+        style.id = "lot-style";
+        // This is the non-destructive fix:
+        // We set the parent to flex-wrap, and the decorator to 100% width.
+        // This pushes ONLY the decorator to the next line.
+        style.textContent = `
+            /* Wrap nameAndDecorators only for rows with our decorator */
+            a[class*="link_"]:has(.lot-decorator-item) [class*="nameAndDecorators_"] {
+                flex-wrap: wrap !important;
+            }
+            /* Allow content area to grow to fit two lines */
+            a[class*="link_"]:has(.lot-decorator-item) [class*="content_"] {
+                height: auto !important;
+                min-height: 34px !important;
+            }
+            a[class*="link_"]:has(.lot-decorator-item) {
+                height: auto !important;
+            }
+            /* Push decorator wrapper to its own row, aligned under the name */
+            a[class*="link_"]:has(.lot-decorator-item) .vc-member-list-decorators-wrapper {
+                flex: 1 0 100% !important;
+                order: 99 !important;
+                display: block !important;
+                margin-left: -50px !important;
+                padding-left: 50px !important;
+            }
+            /* Style to match Discord's native subtext (e.g. "1 Member") */
+            .lot-decorator-item {
+                font-size: 12px !important;
+                color: oklab(0.700601 -0.00173169 -0.0100287) !important;
+                font-weight: 400 !important;
+                line-height: 13px !important;
+                font-family: var(--font-primary) !important;
+                display: block !important;
+                text-align: left !important;
+                margin-top: 1px !important;
+            }
+        `;
+        document.head.appendChild(style);
+
         addMemberListDecorator("LastOnlineTracker", props => {
             const user = (props as any).user;
             if (!user?.id || !isOffline(user.id)) return null;
             const ts = lastSeenMap.get(user.id);
             if (!ts) return null;
-            return <span style={decoratorStyle}>{ago(Date.now() - ts)}</span>;
+            
+            return (
+                <div className="lot-decorator-item">
+                    Active {ago(Date.now() - ts)}
+                </div>
+            );
         });
+        
         addContextMenuPatch("user-context", ctxPatch);
         addContextMenuPatch("gdm-context", ctxPatch);
     },
 
     stop() {
+        document.getElementById("lot-style")?.remove();
         removeMemberListDecorator("LastOnlineTracker");
         removeContextMenuPatch("user-context", ctxPatch);
         removeContextMenuPatch("gdm-context", ctxPatch);
