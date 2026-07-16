@@ -4,7 +4,7 @@
 
 **A [Vencord](https://github.com/Vendicated/Vencord) plugin that tracks when Discord users were last online.**
 
-Shows a *"last seen X ago"* label below usernames in the member list and in right-click menus — completely client-side, resets every restart.
+Shows a *"last seen X ago"* label below usernames in the member list — completely client-side, resets every restart.
 
 ![Discord](https://img.shields.io/badge/Discord-Client_Mod-5865F2?style=flat&logo=discord&logoColor=white)
 ![Vencord](https://img.shields.io/badge/Vencord-Plugin-pink?style=flat)
