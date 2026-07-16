@@ -16,7 +16,7 @@ Shows a *"last seen X ago"* label below usernames in the member list and in righ
 
 ## ✨ Features
 
-- **Below-username label** — shows `🕐 5m ago` directly under a user's name in the member list
+- **Below-username label** — shows `"Active 39m ago"` directly under a user's name in the member list
 - **Auto-updates** — refreshes every 60 seconds without needing to reload Discord
 - **Client-side only** — no servers, no databases, no external requests
 - **Resets on restart** — intentionally ephemeral; closing Discord wipes all data
@@ -26,7 +26,7 @@ Shows a *"last seen X ago"* label below usernames in the member list and in righ
 
 ## 📸 Screenshot (Preview)
 
-![Screenshot](https://cdn.discordapp.com/attachments/1441220061602779147/1499527655584698500/image.png?ex=69f51f74&is=69f3cdf4&hm=14aece6b9be947e8e400fe3afccdb5f3826677a32f5813aebf53ea701f61a502&)
+[![image.png](https://i.postimg.cc/Vv4dCv7P/image.png)](https://postimg.cc/gLXz9zFg)
 
 ---
 
