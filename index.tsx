@@ -19,8 +19,8 @@ const settings = definePluginSettings({
 });
 
 const lastSeen = new Map<string, number>();
-const seenOnline = new Set<string>();
 let loaded = false;
+let ready = false;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function load() {
@@ -128,22 +128,16 @@ export default definePlugin({
 
     flux: {
         PRESENCE_UPDATES({ updates }: { updates?: Array<{ user: { id: string }; status: string; clientStatus?: Record<string, string>; }>; }) {
-            if (!updates) return;
-            for (const { user, status, clientStatus } of updates) {
-                const offline = status === "offline" && !Object.keys(clientStatus ?? {}).length;
-                if (!offline) seenOnline.add(user.id);
-                else if (seenOnline.delete(user.id)) mark(user.id);
-            }
+            if (!ready || !updates) return;
+            for (const { user, status, clientStatus } of updates)
+                if (status === "offline" && !Object.keys(clientStatus ?? {}).length) mark(user.id);
         }
     },
 
     async start() {
         await load();
-        try {
-            const statuses = PresenceStore.getStatuses?.() ?? {};
-            for (const [id, status] of Object.entries(statuses as Record<string, string>))
-                if (status !== "offline") seenOnline.add(id);
-        } catch {}
+        ready = false;
+        setTimeout(() => { ready = true; }, 4000);
 
         document.getElementById("los-style")?.remove();
         const style = document.createElement("style");
@@ -173,9 +167,9 @@ export default definePlugin({
         removeMemberListDecorator("LastOnlineTracker");
         removeContextMenuPatch("user-context", ctxPatch);
         removeContextMenuPatch("gdm-context", ctxPatch);
-        seenOnline.clear();
-        if (!settings.store.persist) lastSeen.clear();
+        ready = false;
         loaded = false;
+        if (!settings.store.persist) lastSeen.clear();
     },
 
     getTracked() {
@@ -187,7 +181,6 @@ export default definePlugin({
 
     async clearAll() {
         lastSeen.clear();
-        seenOnline.clear();
         flushSave();
         await DataStore.del(STORE_KEY);
     },
