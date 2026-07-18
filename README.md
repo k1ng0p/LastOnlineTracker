@@ -20,10 +20,7 @@ Shows a *"last seen X ago"* label below usernames in the member list — complet
 - **Auto-updates** — refreshes every 60 seconds without needing to reload Discord
 - **Client-side only** — no servers, no databases, no external requests
 - **Resets on restart** — intentionally ephemeral; closing Discord wipes all data
-- **Optional persistence** — save last-seen times across Discord restarts (off by default)
 - **Works in servers and DMs**
-
-> **Note:** "Persist" setting (off by default) If you turn it on, keep in mind saved times don't refresh until that person actually goes offline again, so a saved time can sit there and go a bit stale in the meantime
 
 ---
 
