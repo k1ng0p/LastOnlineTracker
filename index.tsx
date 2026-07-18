@@ -1,61 +1,17 @@
-import definePlugin, { OptionType } from "@utils/types";
-import { definePluginSettings } from "@api/Settings";
+import definePlugin from "@utils/types";
 import { React, ReactDOM } from "@webpack/common";
 import { findByPropsLazy } from "@webpack";
-import { DataStore } from "@api/index";
 import { addContextMenuPatch, removeContextMenuPatch, findGroupChildrenByChildId } from "@api/ContextMenu";
 import { addMemberListDecorator, removeMemberListDecorator } from "@api/MemberListDecorators";
 import { Menu } from "@webpack/common";
 
 const PresenceStore = findByPropsLazy("getStatus", "getActivities");
-const STORE_KEY = "lastOnlineTracker_data";
-
-const settings = definePluginSettings({
-    persist: {
-        type: OptionType.BOOLEAN,
-        default: false,
-        description: "keep last-seen after restart. off by default - saved times don't refresh until that person goes offline again, so they can go stale"
-    }
-});
 
 const lastSeen = new Map<string, number>();
-let loaded = false;
 let ready = false;
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
-
-async function load() {
-    if (!settings.store.persist || loaded) return;
-    loaded = true;
-    try {
-        const saved = await DataStore.get(STORE_KEY);
-        if (saved && typeof saved === "object")
-            for (const [id, ts] of Object.entries(saved as Record<string, unknown>))
-                if (typeof ts === "number" && ts > 0) lastSeen.set(id, ts);
-    } catch (e) { console.error("LastOnlineTracker load failed", e); }
-}
-
-async function persistNow() {
-    if (!settings.store.persist) return;
-    try { await DataStore.set(STORE_KEY, Object.fromEntries(lastSeen)); }
-    catch (e) { console.error("LastOnlineTracker save failed", e); }
-}
-
-function save() {
-    if (!settings.store.persist) return;
-    clearTimeout(saveTimer!);
-    saveTimer = setTimeout(persistNow, 1500);
-}
-
-function flushSave() {
-    if (!saveTimer) return;
-    clearTimeout(saveTimer);
-    saveTimer = null;
-    void persistNow();
-}
 
 function mark(id: string) {
     lastSeen.set(id, Date.now());
-    save();
 }
 
 function ago(ms: number) {
@@ -124,7 +80,6 @@ export default definePlugin({
     description: "shows 'Active X ago' under usernames in the DM list.",
     authors: [{ name: "k1ng_op", id: 641266820187160576n }],
     dependencies: ["MemberListDecoratorsAPI", "ContextMenuAPI"],
-    settings,
 
     flux: {
         PRESENCE_UPDATES({ updates }: { updates?: Array<{ user: { id: string }; status: string; clientStatus?: Record<string, string>; }>; }) {
@@ -134,8 +89,7 @@ export default definePlugin({
         }
     },
 
-    async start() {
-        await load();
+    start() {
         ready = false;
         setTimeout(() => { ready = true; }, 4000);
 
@@ -161,15 +115,13 @@ export default definePlugin({
     },
 
     stop() {
-        flushSave();
         document.getElementById("los-style")?.remove();
         document.querySelectorAll(".los-slot").forEach(el => el.remove());
         removeMemberListDecorator("LastOnlineTracker");
         removeContextMenuPatch("user-context", ctxPatch);
         removeContextMenuPatch("gdm-context", ctxPatch);
         ready = false;
-        loaded = false;
-        if (!settings.store.persist) lastSeen.clear();
+        lastSeen.clear();
     },
 
     getTracked() {
@@ -177,11 +129,5 @@ export default definePlugin({
         lastSeen.forEach((ts, id) => out[id] = ago(Date.now() - ts));
         console.table(out);
         return out;
-    },
-
-    async clearAll() {
-        lastSeen.clear();
-        flushSave();
-        await DataStore.del(STORE_KEY);
     },
 });
