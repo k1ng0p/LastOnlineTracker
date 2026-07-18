@@ -2,12 +2,15 @@
 
 # 🕐 LastOnlineTracker
 
-**A [Vencord](https://github.com/Vendicated/Vencord) plugin that tracks when Discord users were last online.**
+**A client mod plugin that tracks when Discord users were last online.**
+**Available for [Vencord](https://github.com/Vendicated/Vencord)/[Equicord](https://github.com/Equicord/Equicord) and [BetterDiscord](https://betterdiscord.app/).**
+
 
 Shows a *"last seen X ago"* label below usernames in the member list — completely client-side, resets every restart.
 
 ![Discord](https://img.shields.io/badge/Discord-Client_Mod-5865F2?style=flat&logo=discord&logoColor=white)
 ![Vencord](https://img.shields.io/badge/Vencord-Plugin-pink?style=flat)
+![BetterDiscord](https://img.shields.io/badge/BetterDiscord-Plugin-8A2BE2?style=flat)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat)
 
 </div>
@@ -102,6 +105,29 @@ git pull
 cd ..\..\..\..
 pnpm build
 ```
+---
+
+# BetterDiscord Version
+
+A standalone port for [BetterDiscord](https://betterdiscord.app/) users — same idea, shows `"Active X ago"` under a user's name once they go offline in your DM list
+
+**Differences from the Vencord version:**
+
+- No build step required — it's a single file you drop straight into your plugins folder
+
+## 📋 Requirements
+
+Latest [BetterDiscord](https://betterdiscord.app/)
+
+## 📦 Installation
+
+1. Download the latest `LastOnlineTracker.plugin.js` from the [Releases page](https://github.com/k1ng0p/LastOnlineTracker/releases)
+```
+   %AppData%/BetterDiscord/plugins
+```
+3. Open Discord → **Settings → Plugins**
+4. Enable **LastOnlineTracker**
+
 
 ---
 
