@@ -6,9 +6,7 @@ import { addMemberListDecorator, removeMemberListDecorator } from "@api/MemberLi
 const PresenceStore = findByPropsLazy("getStatus", "getActivities");
 
 const lastSeen = new Map<string, number>();
-let ready = false;
-let settleTimer: ReturnType<typeof setTimeout> | null = null;
-let hardCapTimer: ReturnType<typeof setTimeout> | null = null;
+const seenOnline = new Set<string>();
 let warnedOnce = false;
 
 function ago(ms: number) {
@@ -27,16 +25,6 @@ function isOffline(id: string) {
         }
         return false;
     }
-}
-
-// discord dumps a burst of "offline" presence updates right after start,
-// mixed in with the real ones. instead of guessing a fixed delay, wait
-// until updates stop arriving for a bit, with a hard cap as a fallback
-// in case they never settle.
-function bumpSettle() {
-    if (ready) return;
-    clearTimeout(settleTimer!);
-    settleTimer = setTimeout(() => { ready = true; }, 1500);
 }
 
 function BelowNameText({ userId }: { userId: string; }) {
@@ -81,19 +69,19 @@ export default definePlugin({
     flux: {
         PRESENCE_UPDATES({ updates }: { updates?: Array<{ user: { id: string }; status: string; clientStatus?: Record<string, string>; }>; }) {
             if (!updates) return;
-            if (!ready) bumpSettle();
             for (const { user, status, clientStatus } of updates) {
-                if (!ready) continue;
-                if (status === "offline" && !Object.keys(clientStatus ?? {}).length) lastSeen.set(user.id, Date.now());
+                const offline = status === "offline" && !Object.keys(clientStatus ?? {}).length;
+                if (!offline) { seenOnline.add(user.id); continue; }
+                // only mark if we actually watched them go online first -
+                // discord resends a batch of "offline" for everyone every
+                // time you switch between a server and the DM list, and
+                // that batch should never count as a real transition
+                if (seenOnline.delete(user.id)) lastSeen.set(user.id, Date.now());
             }
         }
     },
 
     start() {
-        ready = false;
-        bumpSettle();
-        hardCapTimer = setTimeout(() => { ready = true; }, 8000);
-
         document.getElementById("los-style")?.remove();
         const style = document.createElement("style");
         style.id = "los-style";
@@ -117,9 +105,7 @@ export default definePlugin({
         document.getElementById("los-style")?.remove();
         document.querySelectorAll(".los-slot").forEach(el => el.remove());
         removeMemberListDecorator("LastOnlineTracker");
-        clearTimeout(settleTimer!);
-        clearTimeout(hardCapTimer!);
-        ready = false;
+        seenOnline.clear();
         lastSeen.clear();
     },
 
