@@ -1,18 +1,15 @@
 import definePlugin from "@utils/types";
 import { React, ReactDOM } from "@webpack/common";
 import { findByPropsLazy } from "@webpack";
-import { addContextMenuPatch, removeContextMenuPatch, findGroupChildrenByChildId } from "@api/ContextMenu";
 import { addMemberListDecorator, removeMemberListDecorator } from "@api/MemberListDecorators";
-import { Menu } from "@webpack/common";
 
 const PresenceStore = findByPropsLazy("getStatus", "getActivities");
 
 const lastSeen = new Map<string, number>();
 let ready = false;
-
-function mark(id: string) {
-    lastSeen.set(id, Date.now());
-}
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+let hardCapTimer: ReturnType<typeof setTimeout> | null = null;
+let warnedOnce = false;
 
 function ago(ms: number) {
     const s = ms / 1000; if (s < 60) return `${s | 0}s ago`;
@@ -23,7 +20,23 @@ function ago(ms: number) {
 
 function isOffline(id: string) {
     try { return (PresenceStore.getStatus(id) ?? "online") === "offline"; }
-    catch { return false; }
+    catch (e) {
+        if (!warnedOnce) {
+            warnedOnce = true;
+            console.warn("LastOnlineTracker: status check broke, plugin probably needs an update", e);
+        }
+        return false;
+    }
+}
+
+// discord dumps a burst of "offline" presence updates right after start,
+// mixed in with the real ones. instead of guessing a fixed delay, wait
+// until updates stop arriving for a bit, with a hard cap as a fallback
+// in case they never settle.
+function bumpSettle() {
+    if (ready) return;
+    clearTimeout(settleTimer!);
+    settleTimer = setTimeout(() => { ready = true; }, 1500);
 }
 
 function BelowNameText({ userId }: { userId: string; }) {
@@ -59,39 +72,27 @@ function BelowNameText({ userId }: { userId: string; }) {
     );
 }
 
-const ctxPatch = (_: string, children: any[], props: any) => {
-    const id = props?.user?.id ?? props?.guildMember?.userId;
-    if (!id || !isOffline(id)) return;
-    const ts = lastSeen.get(id);
-    if (ts === undefined) return;
-    const group = findGroupChildrenByChildId("user-profile", children)
-        ?? findGroupChildrenByChildId("mark-as-read", children)
-        ?? children;
-    group.push(
-        <Menu.MenuSeparator key="los-sep" />,
-        <Menu.MenuItem key="los-item" id="los-item" disabled
-            label={`Active ${ago(Date.now() - ts)}`}
-            subtext={`Last online: ${new Date(ts).toLocaleString()}`} />
-    );
-};
-
 export default definePlugin({
     name: "LastOnlineTracker",
     description: "shows 'Active X ago' under usernames in the DM list.",
     authors: [{ name: "k1ng_op", id: 641266820187160576n }],
-    dependencies: ["MemberListDecoratorsAPI", "ContextMenuAPI"],
+    dependencies: ["MemberListDecoratorsAPI"],
 
     flux: {
         PRESENCE_UPDATES({ updates }: { updates?: Array<{ user: { id: string }; status: string; clientStatus?: Record<string, string>; }>; }) {
-            if (!ready || !updates) return;
-            for (const { user, status, clientStatus } of updates)
-                if (status === "offline" && !Object.keys(clientStatus ?? {}).length) mark(user.id);
+            if (!updates) return;
+            if (!ready) bumpSettle();
+            for (const { user, status, clientStatus } of updates) {
+                if (!ready) continue;
+                if (status === "offline" && !Object.keys(clientStatus ?? {}).length) lastSeen.set(user.id, Date.now());
+            }
         }
     },
 
     start() {
         ready = false;
-        setTimeout(() => { ready = true; }, 4000);
+        bumpSettle();
+        hardCapTimer = setTimeout(() => { ready = true; }, 8000);
 
         document.getElementById("los-style")?.remove();
         const style = document.createElement("style");
@@ -110,16 +111,14 @@ export default definePlugin({
             const id = (props as any).user?.id;
             return id ? <BelowNameText userId={id} /> : null;
         });
-        addContextMenuPatch("user-context", ctxPatch);
-        addContextMenuPatch("gdm-context", ctxPatch);
     },
 
     stop() {
         document.getElementById("los-style")?.remove();
         document.querySelectorAll(".los-slot").forEach(el => el.remove());
         removeMemberListDecorator("LastOnlineTracker");
-        removeContextMenuPatch("user-context", ctxPatch);
-        removeContextMenuPatch("gdm-context", ctxPatch);
+        clearTimeout(settleTimer!);
+        clearTimeout(hardCapTimer!);
         ready = false;
         lastSeen.clear();
     },
@@ -128,6 +127,5 @@ export default definePlugin({
         const out: Record<string, string> = {};
         lastSeen.forEach((ts, id) => out[id] = ago(Date.now() - ts));
         console.table(out);
-        return out;
     },
 });
