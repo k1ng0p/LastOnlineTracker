@@ -27,39 +27,39 @@ Shows a *"last seen X ago"* label below usernames in the member list — complet
 
 ---
 
-## 📸 Screenshot (Preview)
+## 📸 Screenshots (Preview)
 
-[![image.png](https://i.postimg.cc/Vv4dCv7P/image.png)](https://postimg.cc/gLXz9zFg)
+| **Last Seen** | **Active** |
+|:----------:|:-------------:|
+| ![Last Seen](https://i.postimg.cc/dQTv3299/last-Seen.png) | ![Active](https://i.postimg.cc/h47gvL01/Active.png) |
+
+| **Online** | **Seen** |
+|:----------:|:--------:|
+| ![Online](https://i.postimg.cc/SQzqR6GL/online.png) | ![Seen](https://i.postimg.cc/J7Bm0NQq/Seen.png) |
+
+## ⚙️ Settings
+
+Click the settings icon on the plugin card to customize:
+
+- **🏷️ Label dropdown** — pick what shows before the timestamp: `Active`, `Last seen`, `Online`, or `Seen`
+
+[![Screenshot-2026-07-22-065103.png](https://i.postimg.cc/MpSLWRs0/Screenshot-2026-07-22-065103.png)](https://postimg.cc/mtmjjcWh)
+
+- **🕐 Time format toggle** — switch between relative time (`5m ago`) or exact time (`2:34 PM`)
+
+[![Screenshot-2026-07-22-065135.png](https://i.postimg.cc/fb3mpqx0/Screenshot-2026-07-22-065135.png)](https://postimg.cc/qtTNCLDk)
+
+- **💬 Hover tooltip** — hover the last-seen text to see the full date and time it was recorded
+
+Settings save automatically and apply instantly — no restart needed.
 
 ---
 
-## 📋 Requirements
-
-| Requirement | Version |
-|---|---|
-| [Vencord](https://vencord.dev) | Latest (`pnpm` source install) |
-| Node.js | 18+ |
-| pnpm | Any recent version |
+## 📦 Installation For Both Vencord and BetterDiscord
 
 > **Note:** This plugin requires a **source install** of Vencord (not the installer/pre-built version) because it needs to be compiled.
 
----
-
-## 📦 Installation
-
-### Step 1 — Get a source install of Vencord
-
-If you haven't already:
-
-```bat
-git clone https://github.com/Vendicated/Vencord
-cd Vencord
-pnpm install
-pnpm build
-pnpm inject
-```
-
-### Step 2 — Add the plugin
+### Step 1 — Add the plugin
 
 **Option A — Clone this repo (recommended)**
 ```bat
@@ -81,14 +81,14 @@ Vencord/
             └── index.tsx   ← plugin file goes here
 ```
 
-### Step 3 — Build Vencord
+### Step 2 — Build Vencord
 
 ```bat
 cd path\to\Vencord
 pnpm build
 ```
 
-### Step 4 — Enable the plugin
+### Step 3 — Enable the plugin
 
 1. Open Discord
 2. Go to **User Settings → Vencord → Plugins**
@@ -102,7 +102,6 @@ pnpm build
 ```bat
 cd path\to\Vencord\src\userplugins\lastOnlineTracker
 git pull
-cd ..\..\..\..
 pnpm build
 ```
 ---
@@ -128,74 +127,6 @@ Latest [BetterDiscord](https://betterdiscord.app/)
 3. Open Discord → **Settings → Plugins**
 4. Enable **LastOnlineTracker**
 
-
----
-
-## 🎮 Usage
-
-Once enabled, the plugin works automatically:
-
-### Member List
-Users who go offline while you have Discord open will show a `🕐 Xm ago` label below their username in the right-hand member panel.
- 
-```
-┌─────────────────────────────┐
-│  🟢 OnlineUser              │
-│                             │
-│  ⚫ OfflineUser             │
-│     🕐 12m ago              │  ← appears here
-│                             │
-│  ⚫ AnotherUser             │
-│     🕐 2h ago               │
-└─────────────────────────────┘
-```
-
-
-```
-──────────────────
-  Last seen 5m ago
-  04/21/2026, 14:32:07
-```
-
-
-### Important: When data appears
-- Data only accumulates **during the current session**
-- A user must go **online then offline** while you're watching for them to be tracked
-- Users who were already offline when you started Discord won't show until they next reconnect and disconnect
-- All data is **wiped when Discord closes**
-
----
-
-## ⚙️ How It Works
-
-```
-Discord Presence Event
-        │
-        ▼
-  PRESENCE_UPDATES
-  (Flux dispatcher)
-        │
-        ├── status === "offline"?
-        │   └── clientStatus empty?
-        │           │
-        │           ▼
-        │     Save timestamp
-        │     to Map<userId, timestamp>
-        │
-        ▼
-   React components
-   read from Map and
-   re-render every 60s
-```
-
-The plugin subscribes to Discord's internal `PRESENCE_UPDATES` Flux event using Vencord's built-in `flux` handler. When a user's status transitions to `"offline"` with no active clients (desktop, web, or mobile), the current Unix timestamp is stored in a plain JavaScript `Map`.
-
-Two display surfaces read from this map:
-1. **`addMemberListDecorator`** — injects a React component into member list rows
-2. **`addContextMenuPatch`** — appends a menu item to user right-click menus
-
-The `Map` is never persisted to disk. Calling `stop()` or restarting Discord calls `lastSeenMap.clear()`.
-
 ---
 
 ## ❓ Troubleshooting
@@ -210,24 +141,8 @@ The `Map` is never persisted to disk. Calling `stop()` or restarting Discord cal
 - Run `git pull && pnpm install && pnpm build` to update Vencord
 - If errors persist, open an issue and paste the full build error
 
-**"Not tracked yet" in right-click menu**
-- That user hasn't gone offline while you've had Discord open this session
-- Keep Discord open and wait for them to disconnect
-
 **Plugin shows in settings but badge is missing**
-- The below-name patch may have stopped matching due to a Discord update
-- The right-side badge (decorator) should still work as a fallback
 - Open an issue with your Vencord version and I'll fix the patch (hopefully)
-
----
-
-## 📁 File Structure
-
-```
-lastOnlineTracker/
-├── index.tsx     ← main plugin source
-└── README.md     ← this file
-```
 
 ---
 
@@ -236,7 +151,7 @@ lastOnlineTracker/
 - This plugin is **client-side only** — it cannot track users you can't already see presence for
 - Large servers (250+ members) have limited presence data from Discord
 - Discord's Terms of Service technically prohibit client modifications, though bans are essentially unheard of for passive plugins like this
-- All tracked data stays in your RAM and is never shared
+- All tracked data stays in your Device and is never shared
 
 ---
 
