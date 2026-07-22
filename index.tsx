@@ -1,9 +1,31 @@
-import definePlugin from "@utils/types";
+import definePlugin, { OptionType } from "@utils/types";
+import { definePluginSettings } from "@api/Settings";
 import { React, ReactDOM } from "@webpack/common";
 import { findByPropsLazy } from "@webpack";
 import { addMemberListDecorator, removeMemberListDecorator } from "@api/MemberListDecorators";
 
 const PresenceStore = findByPropsLazy("getStatus", "getActivities");
+
+const settings = definePluginSettings({
+    label: {
+        type: OptionType.SELECT,
+        description: "text shown before the time",
+        options: [
+            { label: "Active", value: "Active", default: true },
+            { label: "Last seen", value: "Last seen" },
+            { label: "Online", value: "Online" },
+            { label: "Seen", value: "Seen" },
+        ],
+    },
+    timeFormat: {
+        type: OptionType.SELECT,
+        description: "how the time is shown",
+        options: [
+            { label: "Relative (5m ago)", value: "relative", default: true },
+            { label: "Exact (2:34 PM)", value: "exact" },
+        ],
+    },
+});
 
 const lastSeen = new Map<string, number>();
 const seenOnline = new Set<string>();
@@ -14,6 +36,12 @@ function ago(ms: number) {
     const m = s / 60; if (m < 60) return `${m | 0}m ago`;
     const h = m / 60; if (h < 24) return `${h | 0}h ago`;
     const d = h / 24; return d < 7 ? `${d | 0}d ago` : `${(d / 7) | 0}w ago`;
+}
+
+function formatTime(ts: number) {
+    return settings.store.timeFormat === "exact"
+        ? new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        : ago(Date.now() - ts);
 }
 
 function isOffline(id: string) {
@@ -52,10 +80,18 @@ function BelowNameText({ userId }: { userId: string; }) {
 
     const ts = lastSeen.get(userId);
     const show = ts !== undefined && isOffline(userId);
+
     return (
         <>
             <span ref={anchorRef} style={{ display: "none" }} />
-            {slot && ReactDOM.createPortal(show ? `Active ${ago(Date.now() - ts!)}` : "", slot)}
+            {slot && ReactDOM.createPortal(
+                show
+                    ? <span title={new Date(ts!).toLocaleString()}>
+                        {settings.store.label} {formatTime(ts!)}
+                    </span>
+                    : "",
+                slot
+            )}
         </>
     );
 }
@@ -65,6 +101,7 @@ export default definePlugin({
     description: "shows 'Active X ago' under usernames in the DM list.",
     authors: [{ name: "k1ng_op", id: 641266820187160576n }],
     dependencies: ["MemberListDecoratorsAPI"],
+    settings,
 
     flux: {
         PRESENCE_UPDATES({ updates }: { updates?: Array<{ user: { id: string }; status: string; clientStatus?: Record<string, string>; }>; }) {
@@ -72,10 +109,6 @@ export default definePlugin({
             for (const { user, status, clientStatus } of updates) {
                 const offline = status === "offline" && !Object.keys(clientStatus ?? {}).length;
                 if (!offline) { seenOnline.add(user.id); continue; }
-                // only mark if we actually watched them go online first -
-                // discord resends a batch of "offline" for everyone every
-                // time you switch between a server and the DM list, and
-                // that batch should never count as a real transition
                 if (seenOnline.delete(user.id)) lastSeen.set(user.id, Date.now());
             }
         }
