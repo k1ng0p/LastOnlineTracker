@@ -5,6 +5,7 @@ import { findByPropsLazy } from "@webpack";
 import { addMemberListDecorator, removeMemberListDecorator } from "@api/MemberListDecorators";
 
 const PresenceStore = findByPropsLazy("getStatus", "getActivities");
+const MAX_TRACKED = 500;
 
 const settings = definePluginSettings({
     label: {
@@ -31,8 +32,13 @@ const lastSeen = new Map<string, number>();
 const seenOnline = new Set<string>();
 let warnedOnce = false;
 
+function evict(store: Map<any, any> | Set<any>) {
+    if (store.size <= MAX_TRACKED) return;
+    store.delete(store.keys().next().value);
+}
+
 function ago(ms: number) {
-    const s = ms / 1000; if (s < 60) return `${s | 0}s ago`;
+    const s = Math.max(0, ms) / 1000; if (s < 60) return `${s | 0}s ago`;
     const m = s / 60; if (m < 60) return `${m | 0}m ago`;
     const h = m / 60; if (h < 24) return `${h | 0}h ago`;
     const d = h / 24; return d < 7 ? `${d | 0}d ago` : `${(d / 7) | 0}w ago`;
@@ -69,14 +75,16 @@ function BelowNameText({ userId }: { userId: string; }) {
         const content = anchorRef.current?.closest<HTMLElement>('[class*="content_"]');
         if (!content) return;
         let el = content.querySelector<HTMLElement>(":scope > .los-slot");
+        if (el && el.dataset.userId !== userId) { el.remove(); el = null; }
         if (!el) {
             el = document.createElement("div");
             el.className = "los-slot los-text";
+            el.dataset.userId = userId;
             content.appendChild(el);
         }
         setSlot(el);
         return () => el?.remove();
-    }, []);
+    }, [userId]);
 
     const ts = lastSeen.get(userId);
     const show = ts !== undefined && isOffline(userId);
@@ -89,7 +97,7 @@ function BelowNameText({ userId }: { userId: string; }) {
                     ? <span title={new Date(ts!).toLocaleString()}>
                         {settings.store.label} {formatTime(ts!)}
                     </span>
-                    : "",
+                    : null,
                 slot
             )}
         </>
@@ -108,25 +116,28 @@ export default definePlugin({
             if (!updates) return;
             for (const { user, status, clientStatus } of updates) {
                 const offline = status === "offline" && !Object.keys(clientStatus ?? {}).length;
-                if (!offline) { seenOnline.add(user.id); continue; }
-                if (seenOnline.delete(user.id)) lastSeen.set(user.id, Date.now());
+                if (!offline) { seenOnline.add(user.id); evict(seenOnline); continue; }
+                if (seenOnline.delete(user.id)) { lastSeen.set(user.id, Date.now()); evict(lastSeen); }
             }
         }
     },
 
     start() {
-        document.getElementById("los-style")?.remove();
-        const style = document.createElement("style");
-        style.id = "los-style";
-        style.textContent = `
-            .los-text {
-                font-size: 12px !important; font-weight: 400 !important; line-height: 16px !important;
-                color: var(--text-muted) !important; font-family: var(--font-primary) !important;
-                white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;
-            }
-            .los-text:empty { display: none !important; }
-        `;
-        document.head.appendChild(style);
+        document.querySelectorAll(".los-slot").forEach(el => el.remove());
+
+        if (!document.getElementById("los-style")) {
+            const style = document.createElement("style");
+            style.id = "los-style";
+            style.textContent = `
+                .los-text {
+                    font-size: 12px !important; font-weight: 400 !important; line-height: 16px !important;
+                    color: var(--text-muted) !important; font-family: var(--font-primary) !important;
+                    white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;
+                }
+                .los-text:empty { display: none !important; }
+            `;
+            document.head.appendChild(style);
+        }
 
         addMemberListDecorator("LastOnlineTracker", props => {
             const id = (props as any).user?.id;
@@ -140,6 +151,7 @@ export default definePlugin({
         removeMemberListDecorator("LastOnlineTracker");
         seenOnline.clear();
         lastSeen.clear();
+        warnedOnce = false;
     },
 
     getTracked() {
