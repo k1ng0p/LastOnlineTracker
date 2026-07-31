@@ -120,7 +120,7 @@ Latest [BetterDiscord](https://betterdiscord.app/)
 
 ## 📦 Installation
 
-1. Download the latest `LastOnlineTracker.plugin.js` from the [Releases page](https://github.com/k1ng0p/LastOnlineTracker/releases)
+1. Download the latest [`LastOnlineTracker.plugin.js`](https://github.com/k1ng0p/LastOnlineTracker/blob/main/LastOnlineTracker.plugin.js)
 ```
    %AppData%/BetterDiscord/plugins
 ```
