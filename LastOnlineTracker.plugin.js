@@ -2,11 +2,11 @@
  * @name LastOnlineTracker
  * @author k1ng_op
  * @description Shows "Active X ago" under usernames in the DM list.
- * @version 1.2.0
+ * @version 1.2.1
  * @authorId 641266820187160576
  * @authorLink https://github.com/k1ng0p
  * @source https://github.com/k1ng0p/LastOnlineTracker
- * @updateUrl https://raw.githubusercontent.com/k1ng0p/LastOnlineTracker/main/betterdiscord/LastOnlineTracker.plugin.js
+ * @updateUrl https://raw.githubusercontent.com/k1ng0p/LastOnlineTracker/main/LastOnlineTracker.plugin.js
  */
 
 const config = {
@@ -32,7 +32,7 @@ const config = {
 };
 
 const NAME = "LastOnlineTracker";
-const VERSION = "1.2.0";
+const VERSION = "1.2.1";
 const MAX_TRACKED = 500;
 const LABELS = ["Active", "Last seen", "Online", "Seen"];
 const FORMATS = [["Relative (5m ago)", "relative"], ["Exact (2:34 PM)", "exact"]];
