@@ -23,6 +23,8 @@ Shows a *"last seen X ago"* label below usernames in the member list — complet
 - **Auto-updates** — refreshes every 60 seconds without needing to reload Discord
 - **Client-side only** — no servers, no databases, no external requests
 - **Resets on restart** — intentionally ephemeral; closing Discord wipes all data
+- **Persistence Last Seen** —Off by default. Turn on persistence in settings only if you get it: it 
+saves last-seen times to disk, and each saved time stays frozen until that person goes offline again.
 - **Works in servers and DMs**
 
 ---
@@ -152,6 +154,7 @@ Latest [BetterDiscord](https://betterdiscord.app/)
 - Large servers (250+ members) have limited presence data from Discord
 - Discord's Terms of Service technically prohibit client modifications, though bans are essentially unheard of for passive plugins like this
 - All tracked data stays in your Device and is never shared
+- Heads up: enabling persistence means it can save data to disk that survives Discord restarts — don't turn it on unless you're fine with that.
 
 ---
 
@@ -162,5 +165,4 @@ GPL-3.0 — see [LICENSE](https://www.gnu.org/licenses/gpl-3.0.en.html)
 ---
 
 <div align="center">
-Made for <a href="https://vencord.dev">Vencord</a> · Not affiliated with Discord Inc.
-</div>
+Made for <a href="https://vencord.dev">Vencord</a>, <a href="https://equicord.org">Equicord</a> and <a href="https://betterdiscord.app">BetterDiscord</a>
