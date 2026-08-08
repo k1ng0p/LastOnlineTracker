@@ -2,7 +2,7 @@
  * @name LastOnlineTracker
  * @author k1ng_op
  * @description Shows "Active X ago" under usernames in the DM list.
- * @version 1.2.1
+ * @version 1.2.2
  * @authorId 641266820187160576
  * @authorLink https://github.com/k1ng0p
  * @source https://github.com/k1ng0p/LastOnlineTracker
@@ -11,28 +11,17 @@
 
 const config = {
     changelog: [
-        { title: "New Features", type: "added", items: [
-            "Custom label text (Active / Last seen / Online / Seen)",
-            "Exact timestamp on hover",
-            "Relative or exact time format toggle"
-        ] },
-        { title: "Bug Fixes", type: "fixed", items: [
-            "Memory leak from unlimited tracked users, now capped at 500",
-            "Cleanup was removing the wrong (still active) user instead of the truly oldest one",
-            "Corrupted saved settings were trusted without checking",
-            "Status check failures were silent, now logs a warning once",
-            "Settings panel could show outdated values after a change"
-        ] },
-        { title: "Improvements", type: "improved", items: [
-            "Only watches the DM list for changes instead of the whole app",
-            "Tighter DM row detection",
-            "Skips update checks when nothing is on screen"
+        { title: "Bug Fix", type: "fixed", items: [
+            "Last seen text was not showing up for anyone",
+            "The plugin was too picky about finding DM rows and where to put the text",
+            "Text could keep showing for a bit after someone came back online instead of disappearing right away",
+            "A popup on first install could silently break the whole plugin if it failed"
         ] }
     ]
 };
 
 const NAME = "LastOnlineTracker";
-const VERSION = "1.2.1";
+const VERSION = "1.2.2";
 const MAX_TRACKED = 500;
 const LABELS = ["Active", "Last seen", "Online", "Seen"];
 const FORMATS = [["Relative (5m ago)", "relative"], ["Exact (2:34 PM)", "exact"]];
@@ -58,7 +47,8 @@ module.exports = class LastOnlineTracker {
     start() {
         const lastVersion = BdApi.Data.load(NAME, "lastVersion");
         if (lastVersion !== VERSION) {
-            BdApi.UI.showChangelogModal({ title: NAME, subtitle: `v${VERSION}`, changes: config.changelog });
+            try { BdApi.UI.showChangelogModal({ title: NAME, subtitle: `v${VERSION}`, changes: config.changelog }); }
+            catch (e) { console.warn(`[${NAME}] changelog popup failed`, e); }
             BdApi.Data.save(NAME, "lastVersion", VERSION);
         }
 
@@ -114,6 +104,7 @@ module.exports = class LastOnlineTracker {
             if (this.knownStatus.get(id) !== "offline" && cur === "offline") this.mark(id);
             this.knownStatus.set(id, cur);
         }
+        this.updateTexts();
     }
 
     mark(id) {
@@ -145,13 +136,12 @@ module.exports = class LastOnlineTracker {
     }
 
     scan() {
-        document.querySelectorAll('[data-list-item-id^="private-channels-uid"]').forEach(row => {
+        document.querySelectorAll('[data-list-item-id]').forEach(row => {
             const id = this.getRecipientId(row);
             if (!id) return;
             if (!this.knownStatus.has(id)) { this.knownStatus.set(id, this.status(id)); evict(this.knownStatus); }
             if (row.querySelector(":scope .los-slot")) return;
-            const content = row.querySelector('a[class*="link_"] [class*="content_"]');
-            if (!content) return;
+            const content = row.querySelector('[class*="content_"]') || row;
             const slot = document.createElement("div");
             slot.className = "los-slot los-text";
             slot.dataset.userId = id;
