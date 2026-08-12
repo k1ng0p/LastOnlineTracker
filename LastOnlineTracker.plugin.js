@@ -2,7 +2,7 @@
  * @name LastOnlineTracker
  * @author k1ng_op
  * @description Shows "Active X ago" under usernames in the DM list.
- * @version 1.2.2
+ * @version 1.2.5
  * @authorId 641266820187160576
  * @authorLink https://github.com/k1ng0p
  * @source https://github.com/k1ng0p/LastOnlineTracker
@@ -11,20 +11,22 @@
 
 const config = {
     changelog: [
-        { title: "Bug Fix", type: "fixed", items: [
-            "Last seen text was not showing up for anyone",
-            "The plugin was too picky about finding DM rows and where to put the text",
-            "Text could keep showing for a bit after someone came back online instead of disappearing right away",
-            "A popup on first install could silently break the whole plugin if it failed"
+        { title: "Added", type: "added", items: [
+            "Persistent last-seen storage — keeps last-seen times saved after Discord restarts",
+            "OFF by default, with a warning popup before you can turn it on"
         ] }
     ]
 };
 
 const NAME = "LastOnlineTracker";
-const VERSION = "1.2.2";
+const VERSION = "1.2.5";
 const MAX_TRACKED = 500;
 const LABELS = ["Active", "Last seen", "Online", "Seen"];
 const FORMATS = [["Relative (5m ago)", "relative"], ["Exact (2:34 PM)", "exact"]];
+const PERSIST_NOTE = "keep last-seen saved after Discord restarts. OFF by default.";
+const PERSIST_WARNING = "Don't turn this on if you don't know how persistent last-seen works. " +
+    "Saved times only update when that person goes offline again — they don't refresh on their own, " +
+    "so a saved time can sit there and look outdated. Don't blame the plugin for showing an inaccurate time.";
 
 function evict(map) {
     if (map.size > MAX_TRACKED) map.delete(map.keys().next().value);
@@ -35,13 +37,16 @@ module.exports = class LastOnlineTracker {
         this.lastSeen = new Map();
         this.knownStatus = new Map();
         this.warnedOnce = false;
+        this.saveTimer = null;
         this.onPresenceChange = this.onPresenceChange.bind(this);
 
         const saved = BdApi.Data.load(NAME, "settings") || {};
         this.settings = {
             label: LABELS.includes(saved.label) ? saved.label : "Active",
-            timeFormat: FORMATS.some(([, v]) => v === saved.timeFormat) ? saved.timeFormat : "relative"
+            timeFormat: FORMATS.some(([, v]) => v === saved.timeFormat) ? saved.timeFormat : "relative",
+            persist: saved.persist === true
         };
+        this.persistArmed = this.settings.persist;
     }
 
     start() {
@@ -55,6 +60,12 @@ module.exports = class LastOnlineTracker {
         this.PresenceStore = BdApi.Webpack.getStore("PresenceStore");
         this.ChannelStore = BdApi.Webpack.getStore("ChannelStore");
         if (!this.PresenceStore || !this.ChannelStore) return;
+
+        if (this.persistArmed) {
+            const savedData = BdApi.Data.load(NAME, "lastSeenData") || {};
+            for (const [id, ts] of Object.entries(savedData))
+                if (typeof ts === "number" && ts > 0) this.lastSeen.set(id, ts);
+        }
 
         this.PresenceStore.addChangeListener(this.onPresenceChange);
         BdApi.DOM.addStyle("los-style", `
@@ -81,11 +92,12 @@ module.exports = class LastOnlineTracker {
         this.PresenceStore?.removeChangeListener(this.onPresenceChange);
         this.observer?.disconnect();
         clearInterval(this.tickInterval);
+        this.flushSave();
         BdApi.DOM.removeStyle("los-style");
         document.querySelectorAll(".los-slot").forEach(el => el.remove());
-        this.lastSeen.clear();
         this.knownStatus.clear();
         this.warnedOnce = false;
+        if (!this.persistArmed) this.lastSeen.clear();
     }
 
     status(id) {
@@ -111,6 +123,25 @@ module.exports = class LastOnlineTracker {
         this.lastSeen.delete(id);
         this.lastSeen.set(id, Date.now());
         evict(this.lastSeen);
+        this.queueSave();
+    }
+
+    persistNow() {
+        if (!this.persistArmed) return;
+        try { BdApi.Data.save(NAME, "lastSeenData", Object.fromEntries(this.lastSeen)); }
+        catch (e) { console.error(`[${NAME}] failed to save data`, e); }
+    }
+
+    queueSave() {
+        clearTimeout(this.saveTimer);
+        this.saveTimer = setTimeout(() => this.persistNow(), 1500);
+    }
+
+    flushSave() {
+        if (!this.saveTimer) return;
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+        this.persistNow();
     }
 
     ago(ms) {
@@ -160,6 +191,34 @@ module.exports = class LastOnlineTracker {
         });
     }
 
+    saveSettings() {
+        BdApi.Data.save(NAME, "settings", this.settings);
+    }
+
+    enablePersist(setOn) {
+        BdApi.UI.showConfirmationModal("Before you enable this", PERSIST_WARNING, {
+            confirmText: "I understand, enable it",
+            cancelText: "Cancel",
+            onConfirm: () => {
+                this.persistArmed = true;
+                this.settings.persist = true;
+                this.saveSettings();
+                this.queueSave();
+                setOn(true);
+            }
+        });
+    }
+
+    disablePersist(setOn) {
+        this.persistArmed = false;
+        this.settings.persist = false;
+        this.saveSettings();
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+        BdApi.Data.delete(NAME, "lastSeenData");
+        setOn(false);
+    }
+
     getSettingsPanel() {
         const { SettingItem, DropdownInput } = BdApi.Components;
         if (!SettingItem || !DropdownInput) {
@@ -175,13 +234,30 @@ module.exports = class LastOnlineTracker {
             React.createElement(SettingItem, { id, name },
                 React.createElement(DropdownInput, { options, value, onChange }));
 
+        function Switch({ on, onClick }) {
+            return React.createElement("div", {
+                onClick,
+                style: {
+                    width: "40px", height: "24px", borderRadius: "12px", cursor: "pointer", position: "relative", flexShrink: 0,
+                    background: on ? "#5865f2" : "#80848e", transition: "background-color 0.2s ease"
+                }
+            }, React.createElement("div", {
+                style: {
+                    width: "20px", height: "20px", borderRadius: "50%", background: "#fff",
+                    position: "absolute", top: "2px", left: on ? "18px" : "2px",
+                    transition: "left 0.2s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.3)"
+                }
+            }));
+        }
+
         function Panel() {
             const [label, setLabel] = React.useState(self.settings.label);
             const [timeFormat, setTimeFormat] = React.useState(self.settings.timeFormat);
+            const [persist, setPersist] = React.useState(self.persistArmed);
 
             const update = (key, val, setter) => {
                 self.settings[key] = val;
-                BdApi.Data.save(NAME, "settings", self.settings);
+                self.saveSettings();
                 self.updateTexts();
                 setter(val);
             };
@@ -190,16 +266,24 @@ module.exports = class LastOnlineTracker {
                 field("los-label", "Label text", LABELS.map(l => ({ label: l, value: l })), label,
                     v => update("label", v, setLabel)),
                 field("los-format", "Time format", FORMATS.map(([l, v]) => ({ label: l, value: v })), timeFormat,
-                    v => update("timeFormat", v, setTimeFormat))
+                    v => update("timeFormat", v, setTimeFormat)),
+                React.createElement("div", {
+                    style: {
+                        display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px",
+                        padding: "10px 0", borderTop: "1px solid var(--background-modifier-accent)"
+                    }
+                },
+                    React.createElement("div", { style: { flex: 1 } },
+                        React.createElement("div", { style: { color: "var(--header-primary)", fontSize: "16px", fontWeight: 600 } }, "Persist last-seen"),
+                        React.createElement("div", { style: { color: "var(--text-muted)", fontSize: "14px", marginTop: "4px" } }, PERSIST_NOTE)
+                    ),
+                    React.createElement(Switch, {
+                        on: persist,
+                        onClick: () => persist ? self.disablePersist(setPersist) : self.enablePersist(setPersist)
+                    }))
             );
         }
 
         return React.createElement(Panel);
-    }
-
-    getTracked() {
-        const out = {};
-        this.lastSeen.forEach((ts, id) => out[id] = this.ago(Date.now() - ts));
-        console.table(out);
     }
 };
